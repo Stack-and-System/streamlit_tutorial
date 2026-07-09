@@ -147,7 +147,31 @@ except FileNotFoundError:
 
 Keep Streamlit calls (`st.write`, `st.button`, and so on) out of your data and business logic. A function like `load_sales_data(region)` or `calculate_churn(df)` should take plain arguments and return plain values, with no awareness that Streamlit exists — that's what makes it possible to unit test with `pytest` without spinning up a Streamlit server. Page modules then become thin: call the logic functions, and use Streamlit calls only to display the results and collect input.
 
-## 9. Deployment considerations
+## 9. Chat interfaces and streaming responses
+
+Streamlit ships purpose-built elements for chat UIs: `st.chat_message` renders a message bubble for a given role ("user", "assistant") and `st.chat_input` pins a text box to the bottom of the page. Reach for these instead of hand-rolling chat bubbles with raw HTML — beyond saving you the CSS, content passed to `st.chat_message` is rendered through normal Streamlit/Markdown escaping, so you don't need `unsafe_allow_html` and don't have to worry about user input breaking out of your markup.
+
+```python
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("Type your message here..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        full_response = st.write_stream(stream_from_llm(st.session_state.messages))
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+```
+
+`st.write_stream` consumes a generator (or any iterable of string chunks) and renders it incrementally, which replaces the older pattern of managing an `st.empty()` placeholder and concatenating chunks by hand. Because the call to an LLM API or a local model server is an external call like any other, wrap it in `try/except` and surface a clear `st.error` (Section 7) rather than letting a connection failure crash the page.
+
+## 10. Deployment considerations
 
 Pin dependencies in `requirements.txt` (or a lockfile) rather than leaving versions unconstrained, since an unpinned Streamlit or pandas upgrade can silently change behavior. Set `server.headless = true` and any resource limits in `config.toml` for containerized or cloud deployments. Whatever platform you use — Streamlit Community Cloud, a Docker container, or an internal PaaS — confirm secrets are injected through that platform's secret store, not baked into the image or repo.
 
@@ -160,6 +184,7 @@ Pin dependencies in `requirements.txt` (or a lockfile) rather than leaving versi
 - Multi-field input uses `st.form` to avoid a rerun per keystroke.
 - Long-running operations show a spinner, status, or toast.
 - Frequently-updating, isolated UI uses `@st.fragment` instead of forcing a full-page rerun.
+- Chat UIs use `st.chat_message` / `st.chat_input` / `st.write_stream` rather than hand-rolled HTML, with external model calls wrapped in `try/except`.
 - Secrets live in `secrets.toml` / a secrets manager, never in source.
 - Business logic is plain Python, testable without Streamlit running.
 - Dependencies are pinned before deployment.
@@ -174,7 +199,9 @@ This guide draws on Streamlit's official documentation:
 - [Session State](https://docs.streamlit.io/develop/api-reference/caching-and-state/st.session_state)
 - [Multipage apps overview](https://docs.streamlit.io/develop/concepts/multipage-apps/overview)
 - [Define multipage apps with st.Page and st.navigation](https://docs.streamlit.io/develop/concepts/multipage-apps/page-and-navigation)
+- [Chat elements: st.chat_message and st.chat_input](https://docs.streamlit.io/develop/api-reference/chat)
+- [Build a basic LLM chat app](https://docs.streamlit.io/develop/tutorials/chat-and-llm-apps/build-conversational-apps)
 
 ## The accompanying demo project
 
-Everything above is implemented in `demo_app/` next to this file: `streamlit_app.py` as the router, `app_pages/home.py` for layout patterns, `app_pages/data_explorer.py` for caching, `app_pages/interactive_form.py` for session state and forms, and `app_pages/live_updates.py` for fragments. See `demo_app/README.md` to run it.
+Everything above is implemented in `demo_app/` next to this file: `streamlit_app.py` as the router, `app_pages/home.py` for layout patterns, `app_pages/data_explorer.py` for caching, `app_pages/interactive_form.py` for session state and forms, `app_pages/live_updates.py` for fragments, and `app_pages/ai_chat.py` for chat interfaces and streaming. See `demo_app/README.md` to run it (the chat page needs a local Ollama install).

@@ -1,93 +1,63 @@
+"""
+AI Chatbot page: a streaming chat interface backed by a local Ollama model
+(Section 9 of the tutorial).
+
+Uses Streamlit's built-in `st.chat_message` / `st.chat_input` / `st.write_stream`
+elements instead of hand-rolled HTML: message content is escaped safely by
+default, and `st.write_stream` handles the chunk-by-chunk rendering that used
+to require a manually managed `st.empty()` placeholder. The call to the
+external Ollama server is wrapped in `try/except` (Section 7) so a missing
+model or unreachable server surfaces as a clear `st.error` instead of a raw
+traceback.
+"""
 import streamlit as st
 from ollama import chat
 
+MODEL_NAME = "llama3.2"
 
-def render():
-    
+
+def _stream_response(messages):
+    """Yield response text chunks from Ollama for st.write_stream to consume."""
+    response_stream = chat(model=MODEL_NAME, messages=messages, stream=True)
+    for chunk in response_stream:
+        yield chunk.message.content
+
+
+def render() -> None:
+    st.title("AI Chatbot")
+    st.write(
+        "A minimal streaming chat UI backed by a local Ollama model "
+        f"(`{MODEL_NAME}`). Requires Ollama running locally with the model "
+        "pulled -- see the demo README for setup."
+    )
+
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    for text in st.session_state.messages:
-        role = text.get("role")
-        if role == "user":
-            st.markdown(
-                f"""
-                <div style="display: flex; justify-content: flex-end; text-align: right; margin-bottom: 15px;">
-                    <div style="background-color: #007aff; color: white; padding: 10px 15px; border-radius: 15px 15px 0px 15px; max-width: 80%;">
-                        {text.get("content")}
-                    </div>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
-        elif role == "assistant":
-            st.markdown(
-                f"""
-                <div style="display: flex; justify-content: flex-start; text-align: left; margin-bottom: 15px;">
-                    <div style="background-color: #f0f2f6; color: #31333F; padding: 10px 15px; border-radius: 15px 15px 15px 0px; max-width: 80%;">
-                        {text.get("content")}
-                    </div>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    # --- 2. HANDLE NEW INPUT ---
     if prompt := st.chat_input("Type your message here..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})    
-        
-        # Render the new user message instantly
-        st.markdown(
-            f"""
-            <div style="display: flex; justify-content: flex-end; text-align: right; margin-bottom: 15px;">
-                <div style="background-color: #007aff; color: white; padding: 10px 15px; border-radius: 15px 15px 0px 15px; max-width: 80%;">
-                    {prompt}
-                </div>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-    
-        # Render and stream the new AI response
-        # We use st.empty() as a dynamic slot to handle streaming inside custom HTML
-        ai_placeholder = st.empty()
-        
-        response_stream = chat(
-            model="llama3.2",
-            messages=st.session_state.messages,
-            stream=True
-        )
-        
-        full_response = ""
-        for chunk in response_stream:
-            full_response += chunk.message.content
-            # Update the placeholder container chunk by chunk (with a subtle typing cursor)
-            ai_placeholder.markdown(
-                f"""
-                <div style="display: flex; justify-content: flex-start; text-align: left; margin-bottom: 15px;">
-                    <div style="background-color: #f0f2f6; color: #31333F; padding: 10px 15px; border-radius: 15px 15px 15px 0px; max-width: 80%;">
-                        <br>{full_response}▒
-                    </div>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
-        
-        # Final rewrite to drop the typing cursor once generation finishes
-        ai_placeholder.markdown(
-            f"""
-            <div style="display: flex; justify-content: flex-start; text-align: left; margin-bottom: 15px;">
-                <div style="background-color: #f0f2f6; color: #31333F; padding: 10px 15px; border-radius: 15px 15px 15px 0px; max-width: 80%;">
-                    <br>{full_response}
-                </div>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-        # Commit response to history and rerun layout cleanly
+        with st.chat_message("assistant"):
+            try:
+                full_response = st.write_stream(
+                    _stream_response(st.session_state.messages)
+                )
+            except Exception as exc:
+                st.error(
+                    "Couldn't reach the local Ollama server. Make sure Ollama "
+                    f"is running and `{MODEL_NAME}` is pulled "
+                    f"(`ollama pull {MODEL_NAME}`). Details: {exc}"
+                )
+                st.stop()
+
         st.session_state.messages.append({"role": "assistant", "content": full_response})
-        st.rerun()
+
 
 if __name__ == "__main__":
     render()

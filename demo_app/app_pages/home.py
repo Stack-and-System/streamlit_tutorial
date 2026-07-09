@@ -11,14 +11,14 @@ import streamlit as st
 def render() -> None:
     st.title("Streamlit Best Practices Demo")
     st.write(
-        "This app is the companion to `streamlit_best_practices_tutorial.md`. "
+        "This app is the companion to `../README.md`. "
         "Each page in the sidebar implements one section of the guide with "
         "working, commented code."
     )
 
     st.subheader("Layout: columns for side-by-side content")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Pages", "4", help="Home, Data Explorer, Forms & State, Live Fragment")
+    col1.metric("Pages", "5", help="Home, Data Explorer, Forms & State, Live Fragment, AI Chatbot")
     col2.metric("Pattern", "st.navigation", help="Preferred multipage API since Streamlit 1.36")
     col3.metric("Status", "Ready", help="This app runs standalone, no external services required")
 
