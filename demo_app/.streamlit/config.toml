@@ -1,0 +1,16 @@
+## App-level configuration (Section 6 of the tutorial).
+## Keeping these here, rather than passed as arguments in code, makes them
+## easy to override per-environment without touching Python.
+
+[theme]
+primaryColor = "#FF4B4B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+font = "sans serif"
+
+[server]
+headless = true
+# Uncomment when deploying behind a reverse proxy that terminates TLS:
+# enableCORS = false
+# enableXsrfProtection = true
